@@ -1,0 +1,109 @@
+import org.apache.tools.ant.filters.ReplaceTokens
+plugins {
+    id 'java'
+    id 'eclipse'
+    id "org.jetbrains.gradle.plugin.idea-ext" version "1.0.1"
+    id 'xyz.jpenilla.run-velocity' version '2.3.0'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group = 'io.miaow233'
+version = '1.0-SNAPSHOT'
+
+ext {
+    set 'version', version.toString()
+    set 'description', description.toString()
+
+    set 'velocity_api_version', velocity_api_version.toString()
+    set 'velocity_minimum_build', velocity_minimum_build.toString()
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://repo.william278.net/velocity/' }
+    maven { url = 'https://repo.papermc.io/repository/maven-public/' }
+    maven { url = 'https://repo.william278.net/releases/' }
+    maven { url = 'https://jitpack.io/' }
+    maven { url = 'https://repo.minebench.de/' }
+}
+
+dependencies {
+    compileOnly "com.velocitypowered:velocity-api:${velocity_api_version}-SNAPSHOT"
+    compileOnly "com.velocitypowered:velocity-proxy:${velocity_api_version}-SNAPSHOT"
+
+    compileOnly 'org.projectlombok:lombok:1.18.32'
+
+    implementation 'de.exlll:configlib-yaml:4.5.0'
+
+    annotationProcessor 'org.projectlombok:lombok:1.18.32'
+}
+
+processResources {
+    filesMatching(['**/*.json', '**/*.yml']) {
+        filter ReplaceTokens as Class, beginToken: '${', endToken: '}',
+                tokens: rootProject.ext.properties
+    }
+}
+
+def targetJavaVersion = 17
+compileJava.options.encoding = 'UTF-8'
+javadoc.options.encoding = 'UTF-8'
+javadoc.options.addStringOption('Xdoclint:none', '-quiet')
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+    sourceCompatibility = javaVersion
+    targetCompatibility = javaVersion
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+    withSourcesJar()
+    withJavadocJar()
+}
+
+shadowJar {
+    relocate 'org.jetbrains', 'io.miaow233.dynamicserver.libraries'
+    relocate 'org.intellij', 'io.miaow233.dynamicserver.libraries'
+    relocate 'de.exlll.configlib', 'io.miaow233.dynamicserver.libraries.configlib'
+
+    dependencies {
+        exclude dependency(':slf4j-api')
+        exclude dependency('org.json:json')
+    }
+
+    destinationDirectory.set(file("$rootDir/target"))
+    archiveClassifier.set('')
+
+    minimize()
+}
+jar.dependsOn shadowJar
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+
+    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
+        options.release.set(targetJavaVersion)
+    }
+}
+tasks {
+    runVelocity {
+        velocityVersion("${velocity_api_version}-SNAPSHOT")
+    }
+}
+
+def templateSource = file('src/main/templates')
+def templateDest = layout.buildDirectory.dir('generated/sources/templates')
+def generateTemplates = tasks.register('generateTemplates', Copy) { task ->
+    def props = [
+            'version': project.version
+    ]
+    task.inputs.properties props
+
+    task.from templateSource
+    task.into templateDest
+    task.expand props
+}
+
+sourceSets.main.java.srcDir(generateTemplates.map { it.outputs })
+
+rootProject.idea.project.settings.taskTriggers.afterSync generateTemplates
+project.eclipse.synchronizationTasks(generateTemplates)

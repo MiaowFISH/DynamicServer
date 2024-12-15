@@ -1,0 +1,13 @@
+{
+  "id": "dynamicserver",
+  "name": "DynamicServer",
+  "version": "${version}",
+  "description": "${description}",
+  "url": "",
+  "authors": [
+    "William278",
+    "AlexDev03"
+  ],
+  "dependencies": [],
+  "main": "io.miaow233.dynamicserver.DynamicServer"
+}
